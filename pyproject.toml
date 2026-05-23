@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shioaji-bars"
-version = "0.1.1"
+version = "0.1.2"
 description = "Shioaji (永豐金) historical OHLCV bar fetcher (CLI + Lib)"
 readme = "README.md"
 license = { text = "MIT" }
