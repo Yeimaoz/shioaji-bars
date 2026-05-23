@@ -1,0 +1,55 @@
+"""Shioaji session login/logout helpers.
+
+Reads credentials from explicit args or env vars SHIOAJI_API_KEY + SHIOAJI_SECRET.
+Optionally loads .env via python-dotenv at import time (safe no-op if no file).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any
+
+from dotenv import load_dotenv
+
+import shioaji
+
+logger = logging.getLogger(__name__)
+
+load_dotenv()  # safe no-op if no .env file
+
+
+class ShioajiAuthError(Exception):
+    """Credentials missing or login failed."""
+
+
+def login(
+    api_key: str | None = None,
+    secret: str | None = None,
+) -> Any:
+    """Create + log into a shioaji.Shioaji() session.
+
+    Args:
+        api_key: defaults to env SHIOAJI_API_KEY
+        secret: defaults to env SHIOAJI_SECRET
+
+    Returns:
+        Logged-in shioaji.Shioaji() instance (caller closes via `logout`).
+    """
+    api_key = api_key or os.environ.get("SHIOAJI_API_KEY")
+    secret = secret or os.environ.get("SHIOAJI_SECRET")
+    if not api_key or not secret:
+        raise ShioajiAuthError(
+            "SHIOAJI_API_KEY + SHIOAJI_SECRET required "
+            "(pass args or set env vars)"
+        )
+    api = shioaji.Shioaji()
+    api.login(api_key=api_key, secret_key=secret)
+    logger.info("[shioaji-bars] logged in")
+    return api
+
+
+def logout(api: Any) -> None:
+    """Log out of a shioaji session."""
+    api.logout()
+    logger.info("[shioaji-bars] logged out")
