@@ -7,6 +7,8 @@ import logging
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from shioaji_bars.contracts import list_contracts
 from shioaji_bars.fetcher import fetch_kbars, fetch_snapshots
 from shioaji_bars.parquet_io import Mode, write_parquet
@@ -41,7 +43,6 @@ def _cmd_snapshots(args: argparse.Namespace) -> int:
         out = fetch_snapshots(api, contracts=args.contracts.split(","))
     finally:
         logout(api)
-    import pandas as pd
     df = pd.DataFrame(out)
     if args.output:
         df.to_parquet(args.output, index=False)
