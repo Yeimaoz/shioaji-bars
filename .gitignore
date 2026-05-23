@@ -10,3 +10,5 @@ build/
 *.parquet
 data/
 .env
+
+*.log

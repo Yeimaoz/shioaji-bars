@@ -30,14 +30,14 @@ def _resolve_contract(api: Any, contract: str) -> Any:
     Strategy:
     - Stock code (all digits, length 4): api.Contracts.Stocks.TSE.{code}
     - Shortcode (MTX/TXF/TMF): pick the nearest-month from api.Contracts.Futures.{MXF/TXF/TMF}
-      Prefers MXFR1/TXFR1/TMFR1 rolling front-month key (sentinel convention).
+      Prefers MXFR1/TXFR1/TMFR1 rolling front-month key (shioaji standard).
     - Explicit delivery code (e.g. MXFM4): nested lookup
     """
     # Try Futures lookup first
     fut = getattr(api.Contracts, "Futures", None)
     if fut is not None:
         if contract in _FUT_SHORTCODE_MAP:
-            # shortcode -> rolling front-month (sentinel convention: MXFR1/TXFR1/TMFR1)
+            # shortcode -> rolling front-month (MXFR1/TXFR1/TMFR1 — shioaji standard)
             group_key = _FUT_SHORTCODE_MAP[contract]
             group = getattr(fut, group_key, None)
             if group is not None:

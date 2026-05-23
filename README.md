@@ -53,9 +53,26 @@ finally:
 
 | Subcommand | Lib method | Needs | Notes |
 |---|---|---|---|
-| `list-contracts` | `list_contracts` | token | 0 quota cost |
+| `list-contracts` | `list_contracts` | token | shioaji ≥1.5 may return `[]` — see Known limitations |
 | `fetch` | `fetch_kbars` | token + market-data scope | counts toward daily quota |
 | `snapshots` | `fetch_snapshots` | token + market-data scope | live polling, not subscribe |
+
+## Known limitations
+
+**shioaji ≥1.5 contract iteration**: the SDK's `ContractCategory` /
+`ContractGroup` containers in 1.5+ may raise Pydantic validation errors
+mid-iteration (server occasionally returns `code: int` where schema
+expects `str`). `list_contracts` is defensive — it returns `[]` (with
+warning) rather than emitting `{code: None}` placeholder entries. For
+known contract codes use direct SDK access instead:
+
+```python
+contract = api.Contracts.Futures.MXF.get("MXFR1")
+df = fetch_kbars(api, contract="MTX", start="2024-12-01", end="2024-12-31")
+```
+
+`fetch_kbars` resolves shortcodes (MTX/TXF/TMF) via the rolling key
+(`MXFR1` etc.) which works on all SDK versions.
 
 ## Contract string resolution
 

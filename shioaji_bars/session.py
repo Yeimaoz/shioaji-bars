@@ -1,6 +1,11 @@
 """Shioaji session login/logout helpers.
 
-Reads credentials from explicit args or env vars SHIOAJI_API_KEY + SHIOAJI_SECRET.
+Reads credentials from explicit args or env vars. Accepted env names (first
+non-empty wins):
+- `SHIOAJI_API_KEY`
+- `SHIOAJI_SECRET` or `SHIOAJI_SECRET_KEY` (the latter matches shioaji's
+  official documentation convention)
+
 Optionally loads .env via python-dotenv at import time (safe no-op if no file).
 """
 
@@ -31,16 +36,21 @@ def login(
 
     Args:
         api_key: defaults to env SHIOAJI_API_KEY
-        secret: defaults to env SHIOAJI_SECRET
+        secret: defaults to env SHIOAJI_SECRET, falling back to SHIOAJI_SECRET_KEY
 
     Returns:
         Logged-in shioaji.Shioaji() instance (caller closes via `logout`).
     """
     api_key = api_key or os.environ.get("SHIOAJI_API_KEY")
-    secret = secret or os.environ.get("SHIOAJI_SECRET")
+    # Accept both env names — SHIOAJI_SECRET_KEY matches the shioaji-doc convention
+    secret = (
+        secret
+        or os.environ.get("SHIOAJI_SECRET")
+        or os.environ.get("SHIOAJI_SECRET_KEY")
+    )
     if not api_key or not secret:
         raise ShioajiAuthError(
-            "SHIOAJI_API_KEY + SHIOAJI_SECRET required "
+            "SHIOAJI_API_KEY + SHIOAJI_SECRET (or SHIOAJI_SECRET_KEY) required "
             "(pass args or set env vars)"
         )
     api = shioaji.Shioaji()
