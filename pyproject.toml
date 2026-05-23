@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shioaji-bars"
+version = "0.1.0"
+description = "Shioaji (永豐金) historical OHLCV bar fetcher (CLI + Lib)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Yeimaoz" }]
+dependencies = [
+    "shioaji>=1.2",
+    "pandas>=2.0",
+    "pyarrow>=15.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+shioaji-bars = "shioaji_bars.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shioaji_bars*"]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "live: real shioaji API tests; requires SHIOAJI_API_KEY env var",
+]
