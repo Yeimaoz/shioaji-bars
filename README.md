@@ -49,6 +49,14 @@ finally:
     logout(api)
 ```
 
+## Capability matrix
+
+| Subcommand | Lib method | Needs | Notes |
+|---|---|---|---|
+| `list-contracts` | `list_contracts` | token | 0 quota cost |
+| `fetch` | `fetch_kbars` | token + market-data scope | counts toward daily quota |
+| `snapshots` | `fetch_snapshots` | token + market-data scope | live polling, not subscribe |
+
 ## Contract string resolution
 
 The `--contract` flag (and `contract=` lib arg) accepts:
@@ -86,13 +94,12 @@ shioaji `api.kbars` always returns 1-min bars regardless of `interval` arg. Resa
 
 Sibling lib `binance-bars` uses int-ms timestamps (`open_time`) and lacks an `amount` (成交金額) column. The two libs are intentionally independent — caller normalizes if joining across markets.
 
-## Capability matrix
+## Error handling
 
-| Subcommand | Lib method | Needs | Notes |
-|---|---|---|---|
-| `list-contracts` | `list_contracts` | token | 0 quota cost |
-| `fetch` | `fetch_kbars` | token + market-data scope | counts toward daily quota |
-| `snapshots` | `fetch_snapshots` | token + market-data scope | live polling, not subscribe |
+| Condition | Exception |
+|---|---|
+| Missing `SHIOAJI_API_KEY` / `SHIOAJI_SECRET` env (or args) | `ShioajiAuthError` (raised by `login()` immediately) |
+| API quota exceeded mid-fetch | shioaji's native error propagates to caller (no auto-retry) |
 
 ## Token capability test
 
