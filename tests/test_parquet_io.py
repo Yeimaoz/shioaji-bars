@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 
 from shioaji_bars.parquet_io import write_parquet, read_last_ts, Mode
@@ -49,3 +51,35 @@ def test_write_skip_if_exists(tmp_path):
     out = pd.read_parquet(path)
     assert len(out) == 1
     assert out["close"].iloc[0] == 100.0
+
+
+def test_write_atomic_preserves_prior_on_simulated_crash(tmp_path, monkeypatch):
+    """If df.to_parquet raises mid-write, the prior parquet must be intact.
+
+    Atomic write contract: stage to .tmp + rename. A crash before rename
+    leaves the original file untouched and only an orphan .tmp behind.
+    """
+    path = tmp_path / "x.parquet"
+    write_parquet(_df([("2024-01-02 09:01:00", 10.0)]),
+                  path, mode=Mode.OVERWRITE)
+    initial_last = read_last_ts(path)
+    assert initial_last is not None
+
+    real_to_parquet = pd.DataFrame.to_parquet
+
+    def crashing_to_parquet(self, *args, **kwargs):
+        if args and str(args[0]).endswith(".tmp"):
+            Path(args[0]).write_bytes(b"PARTIAL_GARBAGE")
+        raise OSError("simulated crash")
+
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", crashing_to_parquet)
+
+    try:
+        write_parquet(_df([("2024-01-02 09:02:00", 11.0)]),
+                      path, mode=Mode.APPEND)
+    except OSError:
+        pass
+
+    monkeypatch.setattr(pd.DataFrame, "to_parquet", real_to_parquet)
+    assert path.exists()
+    assert read_last_ts(path) == initial_last  # prior data intact
