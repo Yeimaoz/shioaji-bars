@@ -72,9 +72,17 @@ def _resolve_contract(api: Any, contract: str) -> Any:
     if contract.isdigit() and len(contract) == 4:
         stocks = getattr(api.Contracts, "Stocks", None)
         if stocks is not None:
-            tse = getattr(stocks, "TSE", None)
-            if tse is not None and hasattr(tse, contract):
-                return getattr(tse, contract)
+            # Try TSE first, then OTC
+            for exchange in ("TSE", "OTC"):
+                exg = getattr(stocks, exchange, None)
+                if exg is not None:
+                    # exg can be dict-like or attribute-access
+                    if isinstance(exg, dict) and contract in exg:
+                        return exg[contract]
+                    if hasattr(exg, "items") and contract in exg:
+                        return exg[contract]
+                    if hasattr(exg, contract):
+                        return getattr(exg, contract)
 
     raise ValueError(f"could not resolve contract: {contract!r}")
 
