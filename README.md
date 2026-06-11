@@ -74,6 +74,23 @@ df = fetch_kbars(api, contract="MTX", start="2024-12-01", end="2024-12-31")
 `fetch_kbars` resolves shortcodes (MTX/TXF/TMF) via the rolling key
 (`MXFR1` etc.) which works on all SDK versions.
 
+**list-contracts exit code**: `list-contracts` returns exit code 0 even when
+the result is empty (e.g. because shioaji 1.5+ iteration fails). This is a
+known limitation; shell scripts that require a non-zero exit on empty results
+must check the output explicitly (e.g. count lines). Changing the exit code
+would be a breaking change for scripts that currently rely on exit 0.
+
+**load_dotenv at import**: importing `shioaji_bars` (or any submodule) calls
+`load_dotenv()` at module level via `session.py`. This is intentional for the
+CLI use-case — it allows credentials in a `.env` file without extra config.
+If you embed this library in a larger application that manages its own env,
+suppress the side effect by setting `DOTENV_PATH` to a non-existent path or
+calling `dotenv.override_env({})` before importing.
+
+**indexs kind spelling**: `Kind = Literal[..., 'indexs']` mirrors the
+shioaji SDK's own `api.Contracts.Indexs` attribute name (which itself is a
+known SDK typo). Using `kind='indices'` will raise `ValueError`.
+
 ## Contract string resolution
 
 The `--contract` flag (and `contract=` lib arg) accepts:
