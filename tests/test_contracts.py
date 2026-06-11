@@ -54,9 +54,14 @@ def test_list_contracts_empty_on_iteration_failure(caplog):
         assert any("list_contracts" in r.message for r in caplog.records)
 
 
-def test_list_contracts_skips_partial_iteration_with_per_item_errors():
+def test_list_contracts_skips_partial_iteration_with_per_item_errors(caplog):
     """Container that raises immediately on iteration → return [] with warning,
-    not silent {code: None} entries (regression for v0.1.0 bug)."""
+    not silent {code: None} entries (regression for v0.1.0 bug).
+
+    §13 fix: previous version had vacuous all() tautology (all([]) is True) —
+    replaced with explicit assert len(out) == 0 and caplog check so the test
+    actually fails when production code changes.
+    """
     api = MagicMock()
 
     class _BrokenIter:
@@ -65,6 +70,11 @@ def test_list_contracts_skips_partial_iteration_with_per_item_errors():
             raise TypeError("simulated shioaji 1.5 validation error")
 
     api.Contracts.Futures = _BrokenIter()
-    out = list_contracts(api, kind="futures")
-    # Critical: no {code: None} placeholders
-    assert all(c.get("code") for c in out)
+    with caplog.at_level("WARNING"):
+        out = list_contracts(api, kind="futures")
+    # Explicit assertion: must be empty, not vacuous all([]) == True
+    assert len(out) == 0, f"expected empty list, got: {out}"
+    # The warning path (list_contracts empty warning) must have fired
+    assert any("list_contracts" in r.message for r in caplog.records), (
+        "expected a warning about empty list_contracts result"
+    )
