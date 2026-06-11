@@ -14,6 +14,8 @@ from shioaji_bars.fetcher import fetch_kbars, fetch_snapshots
 from shioaji_bars.parquet_io import Mode, write_parquet
 from shioaji_bars.session import login, logout
 
+logger = logging.getLogger(__name__)
+
 
 def _cmd_list_contracts(args: argparse.Namespace) -> int:
     api = login()
@@ -33,6 +35,12 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
                          start=args.start, end=args.end)
     finally:
         logout(api)
+    if df.empty:
+        logger.warning(
+            "[fetch] fetch_kbars returned 0 rows for contract=%s %s..%s; skipping write",
+            args.contract, args.start, args.end,
+        )
+        return 0
     write_parquet(df, Path(args.output), mode=Mode(args.mode))
     return 0
 
