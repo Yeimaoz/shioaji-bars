@@ -53,6 +53,39 @@ def test_write_skip_if_exists(tmp_path):
     assert out["close"].iloc[0] == 100.0
 
 
+def test_write_overwrite_empty_df_preserves_existing_parquet(tmp_path):
+    """Empty df + OVERWRITE must NOT destroy existing parquet (data integrity guard).
+
+    Regression for: fetch_kbars returns empty df (no trading day / quota exhausted)
+    silently overwrites existing parquet with a 0-row file.
+    """
+    path = tmp_path / "x.parquet"
+    original = _df([("2024-01-01T00:00:00Z", 100.0),
+                    ("2024-01-01T00:01:00Z", 101.0)])
+    write_parquet(original, path, mode=Mode.OVERWRITE)
+
+    empty_df = pd.DataFrame(columns=original.columns)
+    write_parquet(empty_df, path, mode=Mode.OVERWRITE)
+
+    result = pd.read_parquet(path)
+    assert len(result) == 2, "existing rows must be preserved when incoming df is empty"
+
+
+def test_write_append_empty_df_preserves_existing_parquet(tmp_path):
+    """Empty df + APPEND must not change existing parquet at all (no unnecessary IO)."""
+    path = tmp_path / "x.parquet"
+    original = _df([("2024-01-01T00:00:00Z", 100.0)])
+    write_parquet(original, path, mode=Mode.OVERWRITE)
+    mtime_before = path.stat().st_mtime
+
+    empty_df = pd.DataFrame(columns=original.columns)
+    write_parquet(empty_df, path, mode=Mode.APPEND)
+
+    result = pd.read_parquet(path)
+    assert len(result) == 1, "existing rows must be unchanged"
+    assert path.stat().st_mtime == mtime_before, "file must not be touched when df is empty"
+
+
 def test_write_atomic_preserves_prior_on_simulated_crash(tmp_path, monkeypatch):
     """If df.to_parquet raises mid-write, the prior parquet must be intact.
 
