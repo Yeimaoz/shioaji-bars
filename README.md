@@ -7,7 +7,7 @@ Historical OHLCV bar fetcher for shioaji (永豐金證券) SDK. CLI + Python lib
 ## Install
 
 ```bash
-pip install git+https://github.com/Yeimaoz/shioaji-bars.git@v0.1.0
+pip install git+https://github.com/Yeimaoz/shioaji-bars.git@v0.1.2
 ```
 
 Or for a fresh project, create a `.env`:
