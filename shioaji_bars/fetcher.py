@@ -8,6 +8,11 @@ from typing import Any
 
 import pandas as pd
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
+
 logger = logging.getLogger(__name__)
 
 # Map common short symbols -> primary contract attribute path in api.Contracts.
@@ -22,6 +27,8 @@ _FUT_SHORTCODE_MAP = {
     "TXF": "TXF",   # 大台
     "TMF": "TMF",   # 微台
 }
+
+_TAIPEI_TZ = ZoneInfo("Asia/Taipei")
 
 
 def _resolve_contract(api: Any, contract: str) -> Any:
@@ -51,13 +58,17 @@ def _resolve_contract(api: Any, contract: str) -> Any:
                 if hasattr(group, rolling_key):
                     return getattr(group, rolling_key)
                 # Fallback: iterate values (dict iteration unordered -- last resort)
-                if isinstance(group, dict):
-                    for _k, v in group.items():
-                        return v
-                if hasattr(group, "items"):
-                    for _k, v in group.items():
-                        return v
-                return group
+                logger.warning(
+                    "[_resolve_contract] R1 key %r not found in %s for shortcode %r "
+                    "— R1 key unavailable, cannot safely resolve front-month contract",
+                    rolling_key, type(group).__name__, contract,
+                )
+                raise ValueError(
+                    f"Cannot resolve front-month contract for shortcode {contract!r}: "
+                    f"R1 key {rolling_key!r} not found in group {type(group).__name__}. "
+                    "Ensure shioaji SDK is up to date or use an explicit delivery code "
+                    "(e.g. 'MXFM4') instead of a shortcode."
+                )
         # Try explicit delivery code (e.g. MXFM4)
         prefix = contract[:3]
         if hasattr(fut, prefix):
@@ -88,8 +99,19 @@ def _resolve_contract(api: Any, contract: str) -> Any:
 
 
 def _to_iso_date(t: str | datetime) -> str:
-    """shioaji.kbars expects YYYY-MM-DD strings."""
+    """Convert start/end argument to YYYY-MM-DD string in Taiwan local time (CST, UTC+8).
+
+    shioaji's kbars API interprets the date string as Taiwan Standard Time (UTC+8).
+    If a tz-aware datetime is given, it is first converted to Asia/Taipei before
+    taking the date, so that e.g. datetime(2024,1,1,20,0,tzinfo=timezone.utc)
+    correctly becomes '2024-01-02' (CST 04:00 next day).
+
+    str arguments are passed through unchanged and assumed to already be in Taiwan
+    local date format (YYYY-MM-DD).
+    """
     if isinstance(t, datetime):
+        if t.tzinfo is not None:
+            t = t.astimezone(_TAIPEI_TZ)
         return t.strftime("%Y-%m-%d")
     return t  # assume already correct
 
@@ -98,8 +120,8 @@ def fetch_kbars(
     api: Any,
     contract: str,
     interval: str = "1m",
-    start: str | datetime = None,
-    end: str | datetime = None,
+    start: str | datetime | None = None,
+    end: str | datetime | None = None,
 ) -> pd.DataFrame:
     """Fetch historical kbars from shioaji.
 
@@ -110,12 +132,19 @@ def fetch_kbars(
         interval: INFORMATIONAL ONLY -- shioaji api.kbars always returns 1-min
             bars regardless of this arg. Kept for API symmetry with binance-bars.
             Resample downstream if you want 5m/15m/etc.
-        start: YYYY-MM-DD str or datetime
-        end: YYYY-MM-DD str or datetime
+        start: YYYY-MM-DD str or datetime (tz-aware datetimes are converted to
+            Asia/Taipei before extracting the date)
+        end: YYYY-MM-DD str or datetime (same timezone handling as start)
 
     Returns:
         DataFrame cols: ts (UTC datetime), open, high, low, close, volume, amount
     """
+    if interval != "1m":
+        logger.warning(
+            "[fetch_kbars] interval=%r is informational only — shioaji always returns "
+            "1-min bars regardless of this argument. Resample downstream if needed.",
+            interval,
+        )
     c = _resolve_contract(api, contract)
     if start is None or end is None:
         raise ValueError("start and end required for fetch_kbars")
