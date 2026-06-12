@@ -33,15 +33,15 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
     try:
         df = fetch_kbars(api, contract=args.contract, interval=args.interval,
                          start=args.start, end=args.end)
+        if df.empty:
+            logger.warning(
+                "[fetch] fetch_kbars returned 0 rows for contract=%s %s..%s; skipping write",
+                args.contract, args.start, args.end,
+            )
+            return 0
+        write_parquet(df, Path(args.output), mode=Mode(args.mode))
     finally:
         logout(api)
-    if df.empty:
-        logger.warning(
-            "[fetch] fetch_kbars returned 0 rows for contract=%s %s..%s; skipping write",
-            args.contract, args.start, args.end,
-        )
-        return 0
-    write_parquet(df, Path(args.output), mode=Mode(args.mode))
     return 0
 
 
@@ -49,13 +49,13 @@ def _cmd_snapshots(args: argparse.Namespace) -> int:
     api = login()
     try:
         out = fetch_snapshots(api, contracts=args.contracts.split(","))
+        df = pd.DataFrame(out)
+        if args.output:
+            write_parquet(df, Path(args.output), mode=Mode.OVERWRITE)
+        else:
+            print(df.to_string(index=False))
     finally:
         logout(api)
-    df = pd.DataFrame(out)
-    if args.output:
-        df.to_parquet(args.output, index=False)
-    else:
-        print(df.to_string(index=False))
     return 0
 
 

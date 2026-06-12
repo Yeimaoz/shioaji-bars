@@ -116,3 +116,14 @@ def test_write_atomic_preserves_prior_on_simulated_crash(tmp_path, monkeypatch):
     monkeypatch.setattr(pd.DataFrame, "to_parquet", real_to_parquet)
     assert path.exists()
     assert read_last_ts(path) == initial_last  # prior data intact
+
+
+def test_read_last_ts_empty_dataframe(tmp_path):
+    """read_last_ts must return None when the parquet file exists but has 0 rows."""
+    path = tmp_path / "empty.parquet"
+    # Write a zero-row parquet with the correct schema
+    empty_df = pd.DataFrame({"ts": pd.Series([], dtype="datetime64[ns, UTC]")})
+    empty_df.to_parquet(path, index=False)
+
+    result = read_last_ts(path)
+    assert result is None, "read_last_ts must return None for empty parquet"
