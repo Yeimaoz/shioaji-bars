@@ -162,6 +162,88 @@ def fetch_kbars(
     return df
 
 
+# Canonical fetch_ticks output schema. shioaji's Ticks object exposes 8 parallel
+# lists: ts / close / volume / bid_price / bid_volume / ask_price / ask_volume /
+# tick_type (see shioaji _core.pyi `class Ticks`). We rename `close` -> `price`
+# (it is the trade print price, not a bar close) and keep all 8 fields — the
+# bid/ask price columns are core to TW microstructure work.
+_TICKS_COLUMNS = [
+    "ts",
+    "price",
+    "volume",
+    "bid_price",
+    "ask_price",
+    "bid_volume",
+    "ask_volume",
+    "tick_type",
+]
+
+
+def _empty_ticks_frame() -> pd.DataFrame:
+    """A zero-row DataFrame with the canonical fetch_ticks dtypes."""
+    return pd.DataFrame({
+        "ts": pd.Series([], dtype="datetime64[ns, UTC]"),
+        "price": pd.Series([], dtype="float64"),
+        "volume": pd.Series([], dtype="int64"),
+        "bid_price": pd.Series([], dtype="float64"),
+        "ask_price": pd.Series([], dtype="float64"),
+        "bid_volume": pd.Series([], dtype="int64"),
+        "ask_volume": pd.Series([], dtype="int64"),
+        "tick_type": pd.Series([], dtype="int8"),
+    })
+
+
+def fetch_ticks(api: Any, contract: str, date: str) -> pd.DataFrame:
+    """Fetch a single trading day of raw tick-by-tick trades from shioaji.
+
+    Stores native ticks verbatim — NO aggregation. (An aggTrades-style merge
+    would be lossy and the exchange-side aggregate id cannot be reconstructed
+    client-side; TW tick volumes do not require it.) Downstream consumers that
+    want bar-level features aggregate themselves.
+
+    Args:
+        api: logged-in shioaji.Shioaji() instance.
+        contract: "MTX"/"TXF"/"TMF" shortcode, "MXFM4"-style explicit delivery
+            code, or 4-digit stock code (resolved via the same `_resolve_contract`
+            path as `fetch_kbars`).
+        date: single trading day, "YYYY-MM-DD" (Taiwan local date). One day per
+            call — loop + resume for multi-day backfills.
+
+    Returns:
+        DataFrame with 8 columns (canonical order):
+            ts          datetime64[ns, UTC]  trade timestamp (tz-aware)
+            price       float64              trade print price (shioaji `close`)
+            volume      int64                trade size
+            bid_price   float64              best bid at print time
+            ask_price   float64              best ask at print time
+            bid_volume  int64                best-bid size
+            ask_volume  int64                best-ask size
+            tick_type   int8                 broker-side direction code
+                                             (1=外盤/buy, 2=內盤/sell, 0=undetermined)
+
+        Multiple trades may share the same `ts` — all rows are preserved
+        (no row dedup). An empty day returns a typed zero-row frame, not a raise.
+    """
+    c = _resolve_contract(api, contract)
+    raw = api.ticks(contract=c, date=date)
+
+    ts = list(raw.ts)
+    if not ts:
+        return _empty_ticks_frame()
+
+    df = pd.DataFrame({
+        "ts": pd.to_datetime(ts, unit="ns", utc=True),
+        "price": pd.Series(list(raw.close), dtype="float64"),
+        "volume": pd.Series(list(raw.volume), dtype="int64"),
+        "bid_price": pd.Series(list(raw.bid_price), dtype="float64"),
+        "ask_price": pd.Series(list(raw.ask_price), dtype="float64"),
+        "bid_volume": pd.Series(list(raw.bid_volume), dtype="int64"),
+        "ask_volume": pd.Series(list(raw.ask_volume), dtype="int64"),
+        "tick_type": pd.Series(list(raw.tick_type), dtype="int8"),
+    })
+    return df[_TICKS_COLUMNS]
+
+
 def fetch_snapshots(api: Any, contracts: list[str]) -> list[dict]:
     """Fetch current snapshot quotes for multiple contracts."""
     resolved = [_resolve_contract(api, c) for c in contracts]

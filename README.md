@@ -2,12 +2,18 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Historical OHLCV bar fetcher for shioaji (永豐金證券) SDK. CLI + Python lib dual API. Parquet output. Requires shioaji API token.
+Historical OHLCV bar + raw tick fetcher for shioaji (永豐金證券) SDK. CLI + Python lib dual API. Parquet output. Requires shioaji API token.
+
+> **Usage skill:** an agent-oriented usage guide lives at
+> [`skills/shioaji-bars/SKILL.md`](skills/shioaji-bars/SKILL.md) — credentials,
+> the Taiwan trading-session re-fetch ban, fetch_kbars / fetch_ticks /
+> fetch_snapshots / list_contracts, output schemas, and the public-crypto
+> contrast.
 
 ## Install
 
 ```bash
-pip install git+https://github.com/Yeimaoz/shioaji-bars.git@v0.1.2
+pip install git+https://github.com/Yeimaoz/shioaji-bars.git@v0.2.0
 ```
 
 Or for a fresh project, create a `.env`:
@@ -30,6 +36,11 @@ python -m shioaji_bars fetch --contract MTX --interval 1m \
     --start 2024-12-01 --end 2024-12-31 \
     --output ./MTX_1min.parquet --mode append
 
+# Fetch one trading day of raw ticks (per-day file; OVERWRITE)
+# WARNING: heavy on the daily quota — one day at a time, resume; run after the close.
+python -m shioaji_bars fetch-ticks --contract TXF --date 2026-06-13 \
+    --output ./TXF/2026-06-13.parquet
+
 # Current snapshots
 python -m shioaji_bars snapshots --contracts MTX,TXF,TMF
 ```
@@ -37,13 +48,14 @@ python -m shioaji_bars snapshots --contracts MTX,TXF,TMF
 ### Python lib
 
 ```python
-from shioaji_bars import login, logout, list_contracts, fetch_kbars, fetch_snapshots
+from shioaji_bars import login, logout, list_contracts, fetch_kbars, fetch_ticks, fetch_snapshots
 
 api = login()  # reads SHIOAJI_API_KEY + SHIOAJI_SECRET from env / .env
 try:
     contracts = list_contracts(api, kind="futures")
     df = fetch_kbars(api, contract="MTX", interval="1m",
                      start="2024-12-01", end="2024-12-31")
+    ticks = fetch_ticks(api, contract="TXF", date="2026-06-13")  # one day, raw
     snap = fetch_snapshots(api, contracts=["MTX", "TXF"])
 finally:
     logout(api)
@@ -55,6 +67,7 @@ finally:
 |---|---|---|---|
 | `list-contracts` | `list_contracts` | token | shioaji ≥1.5 may return `[]` — see Known limitations |
 | `fetch` | `fetch_kbars` | token + market-data scope | counts toward daily quota |
+| `fetch-ticks` | `fetch_ticks` | token + market-data scope | **heavy** on daily quota; one day per call; raw, not aggregated; run after the close |
 | `snapshots` | `fetch_snapshots` | token + market-data scope | live polling, not subscribe |
 
 ## Known limitations
@@ -115,6 +128,25 @@ The `--contract` flag (and `contract=` lib arg) accepts:
 | `amount` | float | 成交金額 (volume × avg_price, in TWD) |
 
 shioaji `api.kbars` always returns 1-min bars regardless of `interval` arg. Resample downstream for 5m/15m/etc.
+
+### fetch_ticks (8-column DataFrame, one trading day)
+
+| Column | dtype | Notes |
+|---|---|---|
+| `ts` | datetime (UTC) | trade timestamp, tz-aware; **not unique** (same-ts trades preserved) |
+| `price` | float | trade print price (shioaji's native field name is `close`) |
+| `volume` | int | trade size |
+| `bid_price` / `ask_price` | float | best bid / ask at print time |
+| `bid_volume` / `ask_volume` | int | best-bid / best-ask size |
+| `tick_type` | int8 | broker-side direction: 1=外盤/buy, 2=內盤/sell, 0=undetermined |
+
+`fetch_ticks` stores **raw** ticks verbatim — no aggregation (no aggTrades-style
+merge; the exchange-side aggregate id cannot be reconstructed client-side). One
+day per call; loop + resume for multi-day backfills. `tick_type` is a
+**broker-side** direction code and is **not** equivalent to a crypto exchange's
+`is_buyer_maker` taker-side flag — do not mix across markets. Per-day files use
+`Mode.OVERWRITE` so legitimate same-`ts` trades are not lost to `APPEND`'s by-`ts`
+dedup. Empty day → typed zero-row frame.
 
 ### fetch_snapshots (returns `list[dict]`, NOT DataFrame)
 

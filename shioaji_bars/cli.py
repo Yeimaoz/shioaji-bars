@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from shioaji_bars.contracts import list_contracts
-from shioaji_bars.fetcher import fetch_kbars, fetch_snapshots
+from shioaji_bars.fetcher import fetch_kbars, fetch_snapshots, fetch_ticks
 from shioaji_bars.parquet_io import Mode, write_parquet
 from shioaji_bars.session import login, logout
 
@@ -39,6 +39,27 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
                 args.contract, args.start, args.end,
             )
             return 0
+        write_parquet(df, Path(args.output), mode=Mode(args.mode))
+    finally:
+        logout(api)
+    return 0
+
+
+def _cmd_fetch_ticks(args: argparse.Namespace) -> int:
+    api = login()
+    try:
+        df = fetch_ticks(api, contract=args.contract, date=args.date)
+        if df.empty:
+            logger.warning(
+                "[fetch-ticks] fetch_ticks returned 0 rows for contract=%s date=%s "
+                "(empty trading day, or queried during the TW session — re-fetch "
+                "outside trading hours)",
+                args.contract, args.date,
+            )
+        # Per-day file uses OVERWRITE: a full day is fetched at once, so the
+        # whole file is replaced. This sidesteps write_parquet's by-ts dedup,
+        # which would wrongly drop legitimate same-ts trades. (empty df is a
+        # no-op inside write_parquet, preserving any existing file.)
         write_parquet(df, Path(args.output), mode=Mode(args.mode))
     finally:
         logout(api)
@@ -81,6 +102,16 @@ def main(argv: list[str] | None = None) -> int:
     p_fetch.add_argument("--mode", choices=["append", "overwrite", "skip"],
                           default="append")
 
+    p_ticks = sub.add_parser("fetch-ticks", help="Fetch one day of raw ticks -> parquet")
+    p_ticks.add_argument("--contract", required=True,
+                          help="MTX/TXF/TMF shortcode, MXFM4-style code, or 4-digit stock code")
+    p_ticks.add_argument("--date", required=True, help="single trading day, YYYY-MM-DD")
+    p_ticks.add_argument("--output", required=True,
+                          help="parquet path; per-day convention is <SYM>/<date>.parquet")
+    p_ticks.add_argument("--mode", choices=["append", "overwrite", "skip"],
+                          default="overwrite",
+                          help="default overwrite (per-day file; avoids by-ts dedup)")
+
     p_snap = sub.add_parser("snapshots", help="Current snapshot quotes")
     p_snap.add_argument("--contracts", required=True,
                          help="comma-separated, e.g. MTX,TXF,TMF")
@@ -95,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_list_contracts(args)
     if args.cmd == "fetch":
         return _cmd_fetch(args)
+    if args.cmd == "fetch-ticks":
+        return _cmd_fetch_ticks(args)
     if args.cmd == "snapshots":
         return _cmd_snapshots(args)
     return 2
