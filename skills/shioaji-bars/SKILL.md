@@ -271,21 +271,41 @@ An empty day returns a typed zero-row frame (correct dtypes), not a raise.
 `ts` is a nanosecond-epoch int (or `None`). Convert with
 `pd.to_datetime(ts, unit="ns", utc=True)` if needed.
 
-## G. Difference vs a public crypto bars fetcher
+## G. Sibling package cross-reference (vs binance-bars)
 
-`shioaji-bars` is the authenticated Taiwan-market sibling of a public crypto
-bars fetcher. The shapes differ on purpose:
+`shioaji-bars` (authenticated Taiwan market) and `binance-bars` (public crypto)
+are sibling OSS packages with deliberately aligned capabilities and API shapes
+— learn one and you can carry the knowledge to the other. Concept → this
+package's function ↔ the sibling's function:
 
-| Aspect | shioaji-bars (TW, this lib) | public crypto bars fetcher |
+| Concept | shioaji-bars (this package) | binance-bars (sibling) |
 |---|---|---|
-| Data source | SinoPac shioaji SDK (authenticated) | public REST (anonymous) |
-| Login | required (`login()` / API key) | none |
-| Session limit | ❌ no bulk fetch during TW session (§D) | none |
-| Interval | always 1-min (resample downstream) | usually native multi-interval |
-| Bar timestamp | `ts` datetime64[ns, UTC] | typically int-ms `open_time` |
-| `amount` (成交金額) column | present | absent |
-| Ticks `tick_type` | broker-side direction (外盤/內盤) | exchange taker-side / `is_buyer_maker` (**not equivalent**) |
-| Ticks aggregation | raw, never aggregated | exchanges expose aggTrades (server-side id) |
+| Authentication | `login()` / `logout()` | —（public REST, no API key） |
+| OHLCV bars | `fetch_kbars(api, contract, interval, start, end)` | `fetch_klines(market, symbol, interval, start, end)` |
+| Tick-by-tick trades | `fetch_ticks(api, contract, date)` → DataFrame 8-col (raw · single contract, single day · caller writes the file; CLI `fetch-ticks`) | `fetch_aggtrades(symbols, date_from, date_to, output_dir)` → stats (aggregated · many symbols × many days · writes files itself; CLI `fetch-aggtrades`) |
+| Live snapshot | `fetch_snapshots(api, contracts)` | —（offers funding / OI / basis derived data instead） |
+| Derived data | — | `fetch_funding_rate` / `fetch_open_interest` / `fetch_basis` |
+| Instrument listing | `list_contracts` | `list_symbols` |
+| Write / cursor | `write_parquet` / `read_last_ts` | `write_parquet` / `read_last_open_time` |
+| Tick timestamp col | `ts`（datetime64[ns, UTC]） | `timestamp_ms`（int64 unix-ms） |
+| Tick direction col | `tick_type`（外盤/內盤, **≠** `is_buyer_maker`） | `is_buyer_maker`（taker side） |
+
+Also differs in operational shape: this package is authenticated (`login()`
+required), session-limited (❌ no bulk fetch during a TW session, §D), always
+1-min (resample downstream), and has an `amount` (成交金額) column; the sibling
+is anonymous, unthrottled by session, usually multi-interval, and has no
+`amount` column.
+
+**Key difference (tick-by-tick):** the two tick fetchers are not the same
+shape. This package is a **reader** — `fetch_ticks` goes through the shioaji
+per-day quota, returns one day for one contract as a DataFrame, and the caller
+writes the file. The sibling is a **producer** — `fetch_aggtrades` batch-pulls
+Binance Vision daily archives, writing one file per symbol-day itself,
+resume-safe across many symbols × many days. Schema style follows each family's
+own bars: this package is tz-aware datetime (`ts`), the sibling is int-ms
+(`timestamp_ms`). The direction columns are **not equivalent** — `tick_type`
+is a broker-side 外盤/內盤 code, `is_buyer_maker` is an exchange taker-side flag
+— normalize before any cross-market order-flow comparison.
 
 Caller normalizes if joining across markets — the two are intentionally
 independent.
