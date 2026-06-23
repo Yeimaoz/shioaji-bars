@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shioaji-bars"
-version = "0.2.0"
+version = "0.2.1"
 description = "Shioaji (永豐金) historical OHLCV bar fetcher (CLI + Lib)"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.12"
 authors = [{ name = "Yeimaoz" }]
 dependencies = [
-    "shioaji>=1.2",
+    "shioaji>=1.5.3",  # floor: SinoPac deprecated <1.5.3 server-side (503 SystemMaintenance "update version", 2026-06-23)
     "pandas>=2.0",
     "pyarrow>=15.0",
     "python-dotenv>=1.0",
